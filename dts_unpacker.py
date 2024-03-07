@@ -64,6 +64,7 @@ class DTEntry:
             "compressed": self.compressed,
         }
 
+
 def extract_dt(f, dt_entry):
     f.seek(dt_entry.dtb_offset)
     return DTEntry(dt_entry, f.read(dt_entry.dtb_size))
