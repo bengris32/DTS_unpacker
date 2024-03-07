@@ -110,7 +110,7 @@ def main():
         "image_dt_count": header.dt_count,
         "image_dts": [entry.as_dict for entry in entries],
     }
-    with open("image_info.json", "x") as f:
+    with open("image_info.json", "w") as f:
         json_dump(info, f, indent=4)
 
     print(f"Successfully dumped {header.dt_count} dtbs.")
