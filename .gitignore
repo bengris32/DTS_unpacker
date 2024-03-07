@@ -1,0 +1,6 @@
+# Files
+*.img
+image_info.json
+
+# Folders
+output/

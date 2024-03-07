@@ -6,6 +6,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import os
+import shutil
+
 from ctypes import sizeof, Structure, c_char, c_int
 from argparse import ArgumentParser
 from gzip import decompress as gzip_decompress
@@ -88,11 +91,17 @@ def main():
         default=False,
     )
     args = parser.parse_args()
+
+    # Clear out "output/"
+    if os.path.exists("output"):
+        shutil.rmtree("output")
+    os.makedirs("output")
+
     with open(args.input, "rb") as f:
         header, entries = read_dtb(f)
 
     for entry in entries:
-        with open(f"{entry.offset}.dtb", "xb") as f:
+        with open(os.path.join("output", f"{entry.offset}.dtb"), "xb") as f:
             dt = entry._dt if args.preserve else entry.dt
             f.write(dt)
 
