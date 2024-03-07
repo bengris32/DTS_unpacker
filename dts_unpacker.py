@@ -16,7 +16,7 @@
 # limitations under the License.
 #
 
-from ctypes import sizeof, Structure, c_char, c_int
+from ctypes import sizeof, Structure, c_char, c_int, c_ubyte, c_ulonglong
 from argparse import ArgumentParser
 from gzip import decompress as gzip_decompress
 from json import dump as json_dump
@@ -33,22 +33,39 @@ class dt_head_info(Structure):
 
 class dt_entry_t(Structure):
     _fields_ = [
-        ("reserved0", c_char * 8),
+        ("board_id", c_ubyte * 4),
+        ("reserved", c_ubyte * 4),
         ("dtb_size", c_int),
-        ("reserved1", c_int),
+        ("vrl_size", c_int),
         ("dtb_offset", c_int),
-        ("reserved2", c_int),
-        ("reserved3", c_char * 8),
-        ("reserved4", c_char * 8),
+        ("vrl_offset", c_int),
+        ("dtb_file", c_ulonglong),  # ?
+        ("vrl_file", c_ulonglong),  # ?
     ]
 
 
 class DTEntry:
-    def __init__(self, dt_entry, dt):
-        self.size = dt_entry.dtb_size
-        self.offset = dt_entry.dtb_offset
-        self.compressed = dt[:2] == GZIP_MAGIC
-        self._dt = dt
+    def __init__(self, dt_entry):
+        self.board_id = dt_entry.board_id
+
+        self.dtb_size = dt_entry.dtb_size
+        self.dtb_offset = dt_entry.dtb_offset
+
+        self.vrl_size = dt_entry.vrl_size
+        self.vrl_offset = dt_entry.vrl_offset
+
+        self.compressed = False
+        self._dt = None
+        self.vrl = None
+
+    def read_image(self, f):
+        f.seek(self.dtb_offset)
+        self._dt = f.read(self.dtb_size)
+
+        f.seek(self.vrl_offset)
+        self.vrl = f.read(self.vrl_size)
+
+        self.compressed = self._dt[:2] == GZIP_MAGIC
 
     @property
     def dt(self):
@@ -60,15 +77,20 @@ class DTEntry:
     @property
     def as_dict(self):
         return {
-            "dtb_size": self.size,
-            "dtb_offset": self.offset,
+            "board_id": bytes(self.board_id).decode(),
+            "dtb_size": self.dtb_size,
+            "dtb_offset": self.dtb_offset,
+            "vrl_size": self.vrl_size,
+            "vrl_offset": self.vrl_offset,
             "compressed": self.compressed,
         }
 
 
 def extract_dt(f, dt_entry):
-    f.seek(dt_entry.dtb_offset)
-    return DTEntry(dt_entry, f.read(dt_entry.dtb_size))
+    entry = DTEntry(dt_entry)
+    entry.read_image(f)
+
+    return entry
 
 
 def read_dtb(f):
@@ -112,9 +134,11 @@ def main():
         header, entries = read_dtb(f)
 
     for entry in entries:
-        with open(os.path.join(args.output, f"{entry.offset}.dtb"), "xb") as f:
+        with open(os.path.join(args.output, f"{entry.dtb_offset}.dtb"), "xb") as f:
             dt = entry._dt if args.preserve else entry.dt
             f.write(dt)
+        with open(os.path.join(args.output, f"{entry.vrl_offset}.vrl"), "xb") as f:
+            f.write(entry.vrl)
 
     info = {
         "image_version": header.version,
