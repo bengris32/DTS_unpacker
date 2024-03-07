@@ -24,6 +24,7 @@ import os.path
 
 HSDT_MAGIC = b"HSDT"
 GZIP_MAGIC = b"\x1f\x8b"
+LOWEST_PAGE_SIZE = 2048
 
 
 # See: https://github.com/96boards-hikey/tools-images-hikey960/blob/master/build-from-source/mkdtimg
@@ -58,11 +59,11 @@ class DTEntry:
         self._dt = None
         self.vrl = None
 
-    def read_image(self, f):
-        f.seek(self.dtb_offset)
+    def read_image(self, start, f):
+        f.seek(start + self.dtb_offset)
         self._dt = f.read(self.dtb_size)
 
-        f.seek(self.vrl_offset)
+        f.seek(start + self.vrl_offset)
         self.vrl = f.read(self.vrl_size)
 
         self.compressed = self._dt[:2] == GZIP_MAGIC
@@ -86,24 +87,41 @@ class DTEntry:
         }
 
 
-def extract_dt(f, dt_entry):
+def extract_dt(start, f, dt_entry):
     entry = DTEntry(dt_entry)
-    entry.read_image(f)
+    entry.read_image(start, f)
 
     return entry
 
 
+def find_hsdt_magic(f):
+    current_pos = 0
+    last_pos = 0
+
+    while True:
+        # This search method assumes that the start of the image is aligned to page size.
+        buffer = f.read(LOWEST_PAGE_SIZE)
+        current_pos += LOWEST_PAGE_SIZE
+
+        if buffer.find(HSDT_MAGIC) != -1:
+            print("Found HSDT header at", hex(last_pos))
+            return last_pos
+
+        last_pos = current_pos
+
 def read_dtb(f):
+    magic_pos = find_hsdt_magic(f)
+    f.seek(magic_pos)
+
     b_header = f.read(sizeof(dt_head_info))
     header = dt_head_info.from_buffer_copy(b_header)
-    assert header.magic == HSDT_MAGIC, "Invalid magic!"
 
     entries = [
         dt_entry_t.from_buffer_copy(f.read(sizeof(dt_entry_t)))
         for _ in range(header.dt_count)
     ]
 
-    dts = [extract_dt(f, entry) for entry in entries]
+    dts = [extract_dt(magic_pos * 2, f, entry) for entry in entries]
 
     return header, dts
 
@@ -137,8 +155,10 @@ def main():
         with open(os.path.join(args.output, f"{entry.dtb_offset}.dtb"), "xb") as f:
             dt = entry._dt if args.preserve else entry.dt
             f.write(dt)
-        with open(os.path.join(args.output, f"{entry.vrl_offset}.vrl"), "xb") as f:
-            f.write(entry.vrl)
+
+        if entry.vrl_offset:
+            with open(os.path.join(args.output, f"{entry.vrl_offset}.vrl"), "xb") as f:
+                f.write(entry.vrl)
 
     info = {
         "image_version": header.version,
