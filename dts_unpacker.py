@@ -3,18 +3,11 @@
 # Copyright (C) 2024 bengris32
 # Copyright (C) 2017 The Android Open Source Project
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# SPDX-License-Identifier: Apache-2.0
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+
+import os
+import shutil
 
 from ctypes import sizeof, Structure, c_char, c_int
 from argparse import ArgumentParser
@@ -64,6 +57,7 @@ class DTEntry:
             "compressed": self.compressed,
         }
 
+
 def extract_dt(f, dt_entry):
     f.seek(dt_entry.dtb_offset)
     return DTEntry(dt_entry, f.read(dt_entry.dtb_size))
@@ -97,11 +91,17 @@ def main():
         default=False,
     )
     args = parser.parse_args()
+
+    # Clear out "output/"
+    if os.path.exists("output"):
+        shutil.rmtree("output")
+    os.makedirs("output")
+
     with open(args.input, "rb") as f:
         header, entries = read_dtb(f)
 
     for entry in entries:
-        with open(f"{entry.offset}.dtb", "xb") as f:
+        with open(os.path.join("output", f"{entry.offset}.dtb"), "xb") as f:
             dt = entry._dt if args.preserve else entry.dt
             f.write(dt)
 
@@ -110,7 +110,7 @@ def main():
         "image_dt_count": header.dt_count,
         "image_dts": [entry.as_dict for entry in entries],
     }
-    with open("image_info.json", "x") as f:
+    with open("image_info.json", "w") as f:
         json_dump(info, f, indent=4)
 
     print(f"Successfully dumped {header.dt_count} dtbs.")
