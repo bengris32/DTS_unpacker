@@ -1,0 +1,7 @@
+# Files
+*.img
+*.dtb
+image_info.json
+
+# Folders
+dtb/
