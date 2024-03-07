@@ -20,6 +20,7 @@ from ctypes import sizeof, Structure, c_char, c_int
 from argparse import ArgumentParser
 from gzip import decompress as gzip_decompress
 from json import dump as json_dump
+import os.path
 
 HSDT_MAGIC = b"HSDT"
 GZIP_MAGIC = b"\x1f\x8b"
@@ -64,6 +65,7 @@ class DTEntry:
             "compressed": self.compressed,
         }
 
+
 def extract_dt(f, dt_entry):
     f.seek(dt_entry.dtb_offset)
     return DTEntry(dt_entry, f.read(dt_entry.dtb_size))
@@ -90,6 +92,13 @@ def main():
         "-i", "--input", help="DTS image to extract.", type=str, required=True
     )
     parser.add_argument(
+        "-o",
+        "--output",
+        help="Output directory where extracted images are placed.",
+        type=str,
+        default="dtb",
+    )
+    parser.add_argument(
         "-p",
         "--preserve",
         help="If image is gzipped, don't decompress.",
@@ -97,11 +106,13 @@ def main():
         default=False,
     )
     args = parser.parse_args()
+    os.makedirs(args.output, exist_ok=True)
+
     with open(args.input, "rb") as f:
         header, entries = read_dtb(f)
 
     for entry in entries:
-        with open(f"{entry.offset}.dtb", "xb") as f:
+        with open(os.path.join(args.output, f"{entry.offset}.dtb"), "xb") as f:
             dt = entry._dt if args.preserve else entry.dt
             f.write(dt)
 
@@ -110,7 +121,7 @@ def main():
         "image_dt_count": header.dt_count,
         "image_dts": [entry.as_dict for entry in entries],
     }
-    with open("image_info.json", "x") as f:
+    with open(os.path.join(args.output, "image_info.json"), "x") as f:
         json_dump(info, f, indent=4)
 
     print(f"Successfully dumped {header.dt_count} dtbs.")
